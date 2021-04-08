@@ -22,6 +22,7 @@ var game = new Phaser.Game(config);
 function preload() {
     this.load.image('ship', 'assets/spaceShips_001.png');
     this.load.image('otherPlayer', 'assets/enemyBlack5.png');
+    this.load.image('star', 'assets/star_gold.png');
 }
 
 function create() {
@@ -48,12 +49,35 @@ function create() {
         });
     });
     this.cursors = this.input.keyboard.createCursorKeys();
+
+    this.socket.on('playerMoved', function (playerInfo) {
+        self.otherPlayers.getChildren().forEach(function (otherPlayer) {
+            if (playerInfo.playerId === otherPlayer.playerId) {
+                otherPlayer.setRotation(playerInfo.rotation);
+                otherPlayer.setPosition(playerInfo.x, playerInfo.y);
+            }
+        });
+    });
+
+    this.blueScoreText = this.add.text(16, 16, '', { fontSize: '32px', fill: '#0000FF' });
+    this.redScoreText = this.add.text(584, 16, '', { fontSize: '32px', fill: '#FF0000' });
+
+    this.socket.on('scoreUpdate', function (scores) {
+        self.blueScoreText.setText('Blue: ' + scores.blue);
+        self.redScoreText.setText('Red: ' + scores.red);
+    });
+
+    this.socket.on('starLocation', function (starLocation) {
+        if (self.star) self.star.destroy();
+        self.star = self.physics.add.image(starLocation.x, starLocation.y, 'star');
+        self.physics.add.overlap(self.ship, self.star, function () {
+            this.socket.emit('starCollected');
+        }, null, self);
+    });
 }
 
 function update() {
     if (this.ship) {
-        console.log(this)
-
         if (this.cursors.left.isDown) {
             console.log("Left")
             this.ship.setAngularVelocity(-150);
@@ -72,6 +96,21 @@ function update() {
         }
 
         this.physics.world.wrap(this.ship, 5);
+
+        // emit player movement
+        var x = this.ship.x;
+        var y = this.ship.y;
+        var r = this.ship.rotation;
+        if (this.ship.oldPosition && (x !== this.ship.oldPosition.x || y !== this.ship.oldPosition.y || r !== this.ship.oldPosition.rotation)) {
+            this.socket.emit('playerMovement', { x: this.ship.x, y: this.ship.y, rotation: this.ship.rotation });
+        }
+
+        // save old position data
+        this.ship.oldPosition = {
+            x: this.ship.x,
+            y: this.ship.y,
+            rotation: this.ship.rotation
+        };
     }
 }
 
